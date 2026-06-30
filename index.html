@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Password Explainer — See why passwords fail</title>
+  <meta name="description" content="See exactly how your password would be cracked. Understand password strength with real attack timelines.">
+  <style>
+    :root {
+      --bg: #0d1117; --bg-card: #161b22; --bg-input: #1c2333;
+      --text: #e6edf3; --text-muted: #8b949e; --accent: #58a6ff;
+      --green: #3fb950; --orange: #d29922; --red: #f85149; --border: #30363d;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: var(--bg); color: var(--text); line-height: 1.6;
+      min-height: 100vh; display: flex; flex-direction: column;
+    }
+    a { color: var(--accent); }
+    header {
+      text-align: center; padding: 40px 20px 20px; border-bottom: 1px solid var(--border);
+    }
+    header h1 { font-size: 1.8em; }
+    header p { color: var(--text-muted); max-width: 500px; margin: 6px auto 0; font-size: 0.9em; }
+    .badge-row { display: flex; justify-content: center; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+    .badge-row a img { height: 24px; }
+    main { max-width: 640px; margin: 0 auto; padding: 30px 20px; flex: 1; width: 100%; }
+    .input-box {
+      background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; padding: 20px;
+    }
+    .input-box input {
+      width: 100%; padding: 14px; background: var(--bg-input); border: 1px solid var(--border);
+      border-radius: 6px; color: var(--text); font-size: 1.1em; font-family: 'JetBrains Mono', monospace;
+    }
+    .input-box input:focus { outline: none; border-color: var(--accent); }
+    .meter { height: 8px; background: var(--border); border-radius: 4px; margin-top: 16px; overflow: hidden; }
+    .meter-fill { height: 100%; border-radius: 4px; transition: width 0.3s, background 0.3s; width: 0%; }
+    .meter-labels { display: flex; justify-content: space-between; margin-top: 4px; font-size: 0.8em; color: var(--text-muted); }
+    .result { margin-top: 20px; }
+    .stat-grid { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
+    .stat-card {
+      flex: 1; min-width: 120px; padding: 14px; background: var(--bg-card);
+      border: 1px solid var(--border); border-radius: 8px; text-align: center;
+    }
+    .stat-card .val { font-size: 1.3em; font-weight: 700; }
+    .stat-card .lbl { font-size: 0.78em; color: var(--text-muted); margin-top: 2px; }
+    .attack-box {
+      background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; padding: 16px; margin-bottom: 12px;
+    }
+    .attack-box h4 { font-size: 0.9em; margin-bottom: 4px; }
+    .attack-box p { color: var(--text-muted); font-size: 0.85em; }
+    .attack-box .time { font-weight: 700; }
+    .tips { margin-top: 16px; }
+    .tips h3 { font-size: 0.95em; margin-bottom: 8px; }
+    .tips li { color: var(--text-muted); font-size: 0.85em; margin-bottom: 4px; padding-left: 16px; }
+    .footer-link { text-align: center; padding: 20px; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.85em; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>🔑 Password Explainer</h1>
+    <p>Type a password to see exactly how it would be cracked</p>
+    <div class="badge-row">
+      <a href="https://ko-fi.com/gnaixnaij"><img src="https://img.shields.io/badge/Sponsor-Ko--fi-FF5E5B?style=flat-square&logo=ko-fi" alt="Ko-fi"></a>
+    </div>
+  </header>
+  <main>
+    <div class="input-box">
+      <input type="text" id="password" placeholder="Type a password..." oninput="analyze()" autocomplete="off" spellcheck="false">
+      <div class="meter"><div class="meter-fill" id="meterFill"></div></div>
+      <div class="meter-labels"><span>Weak</span><span>Strong</span></div>
+    </div>
+    <div class="result" id="result"></div>
+    <div class="tips">
+      <h3>💡 Tips</h3>
+      <li>Length beats complexity — 16+ random characters is stronger than "P@ssw0rd!"</li>
+      <li>Dictionary words with substitutions (P@ssw0rd) are still cracked in seconds</li>
+      <li>Use a password manager and generate 20+ character random passwords</li>
+      <li>Enable 2FA everywhere — it stops the attacks that cracking doesn't</li>
+    </div>
+  </main>
+  <div class="footer-link">
+    <a href="https://github.com/gnaixnaij/password-explainer">GitHub</a> · by <a href="https://github.com/gnaixnaij">gnaixnaij</a>
+  </div>
+  <script>
+    function analyze() {
+      const pwd = document.getElementById("password").value;
+      const container = document.getElementById("result");
+      const meter = document.getElementById("meterFill");
+      if (!pwd) { container.innerHTML = ""; meter.style.width = "0%"; return; }
+
+      const len = pwd.length;
+      const hasUpper = /[A-Z]/.test(pwd);
+      const hasLower = /[a-z]/.test(pwd);
+      const hasDigit = /\d/.test(pwd);
+      const hasSymbol = /[^A-Za-z0-9]/.test(pwd);
+      const isCommon = ["password", "123456", "qwerty", "letmein", "admin", "welcome", "monkey", "dragon", "master", "sunshine"].includes(pwd.toLowerCase());
+
+      const charset = (hasUpper ? 26 : 0) + (hasLower ? 26 : 0) + (hasDigit ? 10 : 0) + (hasSymbol ? 33 : 0);
+      const entropy = len * (charset > 0 ? Math.log2(charset) : 0);
+      const combinations = charset > 0 ? Math.pow(charset, len) : 0;
+
+      let score = 0;
+      if (len >= 8) score += 20;
+      if (len >= 12) score += 15;
+      if (len >= 16) score += 15;
+      if (hasUpper && hasLower) score += 10;
+      if (hasDigit) score += 10;
+      if (hasSymbol) score += 15;
+      if (len >= 20) score += 15;
+      if (isCommon) score = 5;
+
+      score = Math.min(100, score);
+      const colors = ["#f85149", "#d29922", "#d29922", "#3fb950", "#3fb950"];
+      const idx = score >= 80 ? 4 : score >= 60 ? 3 : score >= 40 ? 2 : score >= 20 ? 1 : 0;
+      meter.style.width = score + "%";
+      meter.style.background = colors[idx];
+
+      const rating = ["Extremely weak", "Weak", "Moderate", "Strong", "Very strong"][idx];
+
+      function crackTime(rate, label) {
+        const attempts = combinations / rate;
+        const seconds = attempts;
+        if (seconds < 1) return "instantly";
+        if (seconds < 60) return Math.round(seconds) + " seconds";
+        if (seconds < 3600) return Math.round(seconds / 60) + " minutes";
+        if (seconds < 86400) return Math.round(seconds / 3600) + " hours";
+        if (seconds < 31536000) return Math.round(seconds / 86400) + " days";
+        if (seconds < 315360000) return Math.round(seconds / 31536000) + " years";
+        return "centuries";
+      }
+
+      container.innerHTML = `
+        <div class="stat-grid">
+          <div class="stat-card"><div class="val" style="color:${colors[idx]}">${rating}</div><div class="lbl">Strength</div></div>
+          <div class="stat-card"><div class="val">${len}</div><div class="lbl">Characters</div></div>
+          <div class="stat-card"><div class="val">${entropy < 10 ? "0" : Math.round(entropy)}</div><div class="lbl">Bits of entropy</div></div>
+          <div class="stat-card"><div class="val">${charset}</div><div class="lbl">Character set size</div></div>
+        </div>
+        <h3 style="font-size:0.9em;margin-bottom:10px">⏱️ Time to crack</h3>
+        <div class="attack-box">
+          <h4>💰 Online attack <span class="time">${crackTime(1000, "online")}</span></h4>
+          <p>1,000 passwords/second — typical rate for web app login attempts</p>
+        </div>
+        <div class="attack-box">
+          <h4>💻 Offline hash cracking <span class="time">${crackTime(1000000000, "offline")}</span></h4>
+          <p>1 billion passwords/second — single GPU cracking NTLM hashes</p>
+        </div>
+        <div class="attack-box">
+          <h4>🏭 Botnet cracking <span class="time">${crackTime(100000000000, "botnet")}</span></h4>
+          <p>100 billion passwords/second — nation-state or botnet cluster</p>
+        </div>
+        ${isCommon ? '<div style="background:var(--bg-card);border:1px solid var(--red);border-radius:8px;padding:12px;margin-top:12px;color:var(--red);font-size:0.85em">⚠️ This is one of the most common passwords. It will be tried first.</div>' : ''}
+      `;
+    }
+  </script>
+</body>
+</html>
